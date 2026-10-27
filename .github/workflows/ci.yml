@@ -1,0 +1,87 @@
+name: CI
+
+# Every change goes through the same gates. Nothing merges to main unless all jobs pass
+# (enforced by branch protection requiring these checks plus one approving review).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dotnet:
+    name: .NET build, lint, test, audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Lint - formatting
+        run: dotnet format whitespace --verify-no-changes --no-restore --exclude "**/Migrations/**"
+
+      - name: Lint - code style
+        run: dotnet format style --verify-no-changes --no-restore --exclude "**/Migrations/**"
+
+      - name: Build (analyzers on, warnings are errors)
+        run: dotnet build --no-restore -c Release
+
+      - name: Test (unit + integration against SQL Server in Docker)
+        run: dotnet test --no-build -c Release
+
+      - name: Dependency audit (fail on any vulnerable package, incl. transitive)
+        run: |
+          dotnet list package --vulnerable --include-transitive 2>&1 | tee audit.txt
+          if grep -q "has the following vulnerable packages" audit.txt; then
+            echo "::error::Vulnerable NuGet packages found"
+            exit 1
+          fi
+
+  web:
+    name: Web lint, typecheck, build, audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+      - name: Lint (ESLint, zero warnings)
+        run: npm run lint
+      - name: Format check (Prettier)
+        run: npm run format:check
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
+      - name: Dependency audit
+        run: npm audit --audit-level=high --omit=dev
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

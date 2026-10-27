@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ThriveLink.Api/ThriveLink.Api.csproj" />
+    <Project Path="src/ThriveLink.Data/ThriveLink.Data.csproj" />
+    <Project Path="src/ThriveLink.Domain/ThriveLink.Domain.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ThriveLink.Api.Tests/ThriveLink.Api.Tests.csproj" />
+    <Project Path="tests/ThriveLink.Domain.Tests/ThriveLink.Domain.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,47 @@
+name: CodeQL
+
+# Static application security testing (SAST) for C# and TypeScript.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 18 * * 0" # weekly, Monday morning NZ time
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: csharp
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        if: matrix.language == 'csharp'
+        with:
+          global-json-file: global.json
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-and-quality
+
+      - name: Build
+        if: matrix.build-mode == 'manual'
+        run: dotnet build -c Release
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}

@@ -1,0 +1,14 @@
+# Local SQL Server for development. The SA password comes from .env (gitignored).
+services:
+  sql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in .env}
+    ports:
+      - "14333:1433"
+    volumes:
+      - thrivelink-sql:/var/opt/mssql
+
+volumes:
+  thrivelink-sql:
