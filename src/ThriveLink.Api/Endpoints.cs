@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+
 using Microsoft.EntityFrameworkCore;
 
 using ThriveLink.Data;
@@ -140,6 +143,20 @@ public static class Endpoints
                 IngestOutcome.FutureDate => Results.ValidationProblem(new Dictionary<string, string[]> { ["date"] = ["Date is in the future."] }),
                 _ => Results.Ok(new { result.Outcome, result.Points!.Steps, result.Points.Workout, result.Points.Total, result.Points.FlagReason }),
             };
-        });
+        }).AddEndpointFilter(RequireIngestApiKey);
+    }
+
+    /// <summary>
+    /// Ingest callers (API Management, Functions) must send X-Api-Key matching Ingest:ApiKey from Key Vault.
+    /// When no key is configured (local dev, tests) the check is skipped.
+    /// </summary>
+    private static async ValueTask<object?> RequireIngestApiKey(EndpointFilterInvocationContext ctx, EndpointFilterDelegate next)
+    {
+        var expected = ctx.HttpContext.RequestServices.GetRequiredService<IConfiguration>()["Ingest:ApiKey"];
+        if (string.IsNullOrEmpty(expected)) return await next(ctx);
+
+        var supplied = ctx.HttpContext.Request.Headers["X-Api-Key"].ToString();
+        var ok = CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(supplied), Encoding.UTF8.GetBytes(expected));
+        return ok ? await next(ctx) : Results.Unauthorized();
     }
 }

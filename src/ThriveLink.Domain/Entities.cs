@@ -65,6 +65,41 @@ public class ActivityDay
     public string? FlagReason { get; set; }
 }
 
+/// <summary>Result of the weekly target check for one member and one Monday-to-Sunday week.</summary>
+public class WeeklyReward
+{
+    public long Id { get; set; }
+    public int MemberId { get; set; }
+    public DateOnly WeekStart { get; set; }
+    public int Points { get; set; }
+    public int Target { get; set; }
+    public bool Achieved { get; set; }
+    public DateTimeOffset EvaluatedAt { get; set; }
+}
+
+/// <summary>One measure from a partner health check (pharmacy or GP), imported nightly by Data Factory.</summary>
+public class HealthCheckResult
+{
+    public long Id { get; set; }
+    public int MemberId { get; set; }
+    public DateOnly CheckDate { get; set; }
+    public required string Measure { get; set; }
+    public required string Partner { get; set; }
+    public DateTimeOffset ImportedAt { get; set; }
+}
+
+/// <summary>A partner file row that could not be applied, kept so support can follow up with the partner.</summary>
+public class HealthCheckReject
+{
+    public long Id { get; set; }
+    public string? MemberNumber { get; set; }
+    public string? CheckDate { get; set; }
+    public string? Measure { get; set; }
+    public string? Partner { get; set; }
+    public required string Reason { get; set; }
+    public DateTimeOffset RejectedAt { get; set; }
+}
+
 /// <summary>Points ledger: at most one row per member, day and category.</summary>
 public class PointsEntry
 {

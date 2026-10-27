@@ -489,3 +489,7 @@ $RECYCLE.BIN/
 src/ThriveLink.Api/wwwroot/
 web/node_modules/
 
+
+# Azure Functions local settings (may contain secrets)
+local.settings.json
+

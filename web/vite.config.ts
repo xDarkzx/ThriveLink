@@ -8,6 +8,8 @@ export default defineConfig({
   build: {
     outDir: "../src/ThriveLink.Api/wwwroot",
     emptyOutDir: true,
+    // Recharts is most of the bundle; 700 kB (≈190 kB gzipped) is fine for an internal ops page.
+    chunkSizeWarningLimit: 700,
   },
   server: {
     port: 5173,

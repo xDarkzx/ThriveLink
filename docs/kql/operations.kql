@@ -1,0 +1,39 @@
+// ThriveLink operations queries for Log Analytics / Application Insights.
+// Run in the portal (Logs) or: az monitor log-analytics query -w <workspace-guid> --analytics-query "<query>"
+
+// 1. Wearable syncs per provider per hour (from the WearableWebhook function's structured log).
+AppTraces
+| where Message startswith "Wearable sync TL"
+| extend Provider = tostring(Properties.Provider), Days = toint(Properties.DayCount)
+| summarize Syncs = count(), Days = sum(Days) by Provider, bin(TimeGenerated, 1h)
+| order by TimeGenerated desc
+
+// 2. Stale devices trend (StaleDeviceSweep function, daily).
+AppTraces
+| where Message startswith "Stale device sweep"
+| project TimeGenerated, StaleDeviceCount = toint(Properties.StaleDeviceCount)
+| order by TimeGenerated desc
+
+// 3. API errors and slow requests in the last 24h.
+AppRequests
+| where TimeGenerated > ago(24h)
+| summarize Requests = count(), Failed = countif(Success == false), P95ms = percentile(DurationMs, 95) by Name
+| order by Failed desc, P95ms desc
+
+// 4. Exceptions grouped by type and operation.
+AppExceptions
+| where TimeGenerated > ago(24h)
+| summarize Count = count(), Example = any(OuterMessage) by ExceptionType, OperationName
+| order by Count desc
+
+// 5. Data Factory partner import runs (needs the ADF diagnostic setting from infra/alerts.bicep).
+ADFPipelineRun
+| where PipelineName == "ImportPartnerHealthChecks"
+| project TimeGenerated, Status, RunId, Start, End, FailureType
+| order by TimeGenerated desc
+
+// 6. SQL dependency calls from the app: slowest queries.
+AppDependencies
+| where Type == "SQL" and TimeGenerated > ago(24h)
+| summarize Calls = count(), P95ms = percentile(DurationMs, 95) by Target, Name
+| top 10 by P95ms
