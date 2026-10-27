@@ -34,8 +34,22 @@ for ($i = 1; $i -le 20; $i++) {
     try { $h = Invoke-RestMethod "$url/health" -TimeoutSec 30; break } catch { Start-Sleep 15 }
 }
 Write-Host "  GET /health -> $($h.status)"
-try {
-    Invoke-WebRequest "$url/api/members/TL100001'%20OR%201=1--" -UseBasicParsing -TimeoutSec 30 | Out-Null
-    Write-Host '  SQL injection probe was NOT blocked' -ForegroundColor Red
-} catch { Write-Host "  SQL injection probe -> HTTP $($_.Exception.Response.StatusCode.value__) (403 = blocked by WAF)" }
+# Attack payloads go in query-string arguments, which is where the OWASP rules inspect them.
+$probes = [ordered]@{
+    'SQL injection' = "$url/api/stats?member=1%27%20OR%20%271%27%3D%271"
+    'Cross-site scripting' = "$url/api/stats?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E"
+}
+$blocked = 0
+foreach ($p in $probes.GetEnumerator()) {
+    try {
+        Invoke-WebRequest $p.Value -UseBasicParsing -TimeoutSec 30 | Out-Null
+        Write-Host "  $($p.Key) probe -> 200 (NOT blocked)" -ForegroundColor Red
+    }
+    catch {
+        $code = $_.Exception.Response.StatusCode.value__
+        if ($code -eq 403) { $blocked++ }
+        Write-Host "  $($p.Key) probe -> HTTP $code $(if ($code -eq 403) { '(blocked by WAF)' } else { '(NOT blocked by WAF)' })"
+    }
+}
+Write-Host "  WAF blocked $blocked of $($probes.Count) attack probes"
 Write-Host "`nGateway: $url   (remember: ./infra/gateway.ps1 -Remove)" -ForegroundColor Green
