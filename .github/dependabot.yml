@@ -7,6 +7,12 @@ updates:
     groups:
       dotnet:
         patterns: ["*"]
+    ignore:
+      # 3.x is an OpenTelemetry rewrite that removes ITelemetryInitializer; the Functions adapter
+      # (Microsoft.Azure.Functions.Worker.ApplicationInsights 2.51) still needs 2.x and throws
+      # TypeLoadException at startup. Revisit when the adapter supports 3.x.
+      - dependency-name: Microsoft.ApplicationInsights.WorkerService
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: /web
