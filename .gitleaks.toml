@@ -1,0 +1,12 @@
+# Default gitleaks rules, plus an allowlist for Azure built-in role definition IDs.
+# These GUIDs are published by Microsoft and identical in every tenant; they are not secrets.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Azure built-in role definition IDs"
+regexTarget = "match"
+regexes = [
+  '''4633458b-17de-408a-b874-0445c86b69e6''', # Key Vault Secrets User
+  '''b86a8fe4-44ce-4948-aee5-eccb2c155cd7''', # Key Vault Secrets Officer
+]
