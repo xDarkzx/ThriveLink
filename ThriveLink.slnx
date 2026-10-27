@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/ThriveLink.Api/ThriveLink.Api.csproj" />
+    <Project Path="src/ThriveLink.ClaimsTriage/ThriveLink.ClaimsTriage.csproj" />
     <Project Path="src/ThriveLink.Data/ThriveLink.Data.csproj" />
     <Project Path="src/ThriveLink.Domain/ThriveLink.Domain.csproj" />
     <Project Path="src/ThriveLink.Functions/ThriveLink.Functions.csproj" />

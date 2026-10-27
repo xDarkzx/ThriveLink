@@ -13,6 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { fetchStats, type Provider, type Stats } from "./api";
+import Claims from "./Claims";
 
 // Chart tokens (dataviz reference palette): one series hue, recessive chrome, ink for text.
 const SERIES = "#2a78d6";
@@ -34,6 +35,7 @@ export default function App() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [tab, setTab] = useState<"overview" | "claims">("overview");
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -71,10 +73,32 @@ export default function App() {
         </div>
       </header>
 
+      <nav className="border-b border-slate-200 bg-white">
+        <div className="mx-auto max-w-7xl px-4 flex gap-6 text-sm">
+          {(["overview", "claims"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => {
+                setTab(t);
+              }}
+              className={`py-2 border-b-2 ${tab === t ? "border-brand font-semibold text-slate-900" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+            >
+              {t === "overview" ? "Programme overview" : "Claims queue"}
+            </button>
+          ))}
+        </div>
+      </nav>
+
       <main className="mx-auto max-w-7xl px-4 py-6 space-y-6">
-        {error && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-        {!stats && !error && <p className="text-slate-500">Loading…</p>}
-        {stats && <Dashboard stats={stats} />}
+        {tab === "claims" ? (
+          <Claims key={reloadKey} />
+        ) : (
+          <>
+            {error && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+            {!stats && !error && <p className="text-slate-500">Loading…</p>}
+            {stats && <Dashboard stats={stats} />}
+          </>
+        )}
       </main>
     </div>
   );

@@ -81,9 +81,14 @@ if ($Setup) {
     $pub = (Get-Content "$keyPath.pub" -Raw).Trim()
 
     Step 'Legacy VM, cache storage, vault and networks (dr.bicep)'
-    $out = az deployment group create -g $sourceRg -n "dr-$(Get-Date -Format yyyyMMdd-HHmmss)" -f "$PSScriptRoot/dr.bicep" `
-        -p env=$Env sshPublicKey="$pub" --query properties.outputs -o json
-    if ($LASTEXITCODE -ne 0) { throw 'dr.bicep deployment failed' }
+    # Small x86 sizes are frequently capacity-restricted on trial subscriptions; try a few in order.
+    foreach ($size in 'Standard_B2ats_v2', 'Standard_B2s', 'Standard_B1ms', 'Standard_D2as_v5', 'Standard_D2s_v5') {
+        Write-Host "  trying $size"
+        $out = az deployment group create -g $sourceRg -n "dr-$(Get-Date -Format yyyyMMdd-HHmmss)" -f "$PSScriptRoot/dr.bicep" `
+            -p env=$Env sshPublicKey="$pub" vmSize=$size --query properties.outputs -o json 2>$null
+        if ($LASTEXITCODE -eq 0) { Write-Host "  using $size"; break }
+    }
+    if ($LASTEXITCODE -ne 0) { throw 'dr.bicep deployment failed for every candidate VM size' }
     $o = $out | ConvertFrom-Json
     $vaultPath = "/subscriptions/$sub/resourceGroups/$sourceRg/providers/Microsoft.RecoveryServices/vaults/$($o.vaultName.value)"
 
@@ -143,7 +148,9 @@ if ($Setup) {
                     recoveryResourceGroupId = $targetRgId; recoveryReplicaDiskAccountType = 'Standard_LRS'; recoveryTargetDiskAccountType = 'Standard_LRS' })
             } } } | Out-Null
     }
-    Write-Host '  Replication enabled. Initial sync takes ~30-60 minutes; check with: ./infra/dr.ps1 -Status' -ForegroundColor Green
+    # The PUT only queues an EnableDr job; confirm the protected item really exists before reporting success.
+    Wait-For 'protected item' { (Get-Arm $itemPath).properties.protectionState } 20
+    Write-Host "  Replication enabled ($((Get-Arm $itemPath).properties.protectionStateDescription)). Initial sync takes ~30-60 minutes; check with: ./infra/dr.ps1 -Status" -ForegroundColor Green
 }
 
 if ($Status -or $Drill) {

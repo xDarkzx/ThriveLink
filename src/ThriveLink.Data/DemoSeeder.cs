@@ -15,6 +15,73 @@ public static class DemoSeeder
 
     public static async Task SeedAsync(ThriveLinkDbContext db, TimeProvider clock, int members = 60, int days = 35, CancellationToken ct = default)
     {
+        await SeedMembersAsync(db, clock, members, days, ct);
+        await SeedClaimsAsync(db, clock, ct);
+    }
+
+    /// <summary>
+    /// A small, varied claims queue for the assessor view: routine, missing receipt, high value,
+    /// late pre-approval and a duplicate. Document rows are metadata only (no files behind them).
+    /// </summary>
+    public static async Task SeedClaimsAsync(ThriveLinkDbContext db, TimeProvider clock, CancellationToken ct = default)
+    {
+        if (await db.Claims.AnyAsync(ct) || !await db.Members.AnyAsync(ct)) return;
+
+        var now = clock.GetUtcNow();
+        var today = DateOnly.FromDateTime(now.UtcDateTime);
+        var memberIds = await db.Members.OrderBy(m => m.Id).Select(m => m.Id).Take(10).ToListAsync(ct);
+
+        (ClaimType Type, ClaimCategory Category, string Provider, int DaysAgo, decimal Amount, string Description, bool Receipt)[] samples =
+        [
+            (ClaimType.Reimbursement, ClaimCategory.GpVisit, "Hamilton Medical Centre", 6, 65m, "GP visit for chest infection, prescribed antibiotics.", true),
+            (ClaimType.Reimbursement, ClaimCategory.Physiotherapy, "Waikato Sports Physio", 12, 240m, "Four physio sessions after a netball ankle sprain.", true),
+            (ClaimType.Reimbursement, ClaimCategory.Specialist, "Tauranga Dermatology", 20, 380m, "Skin check with specialist, mole removed and sent for testing.", false),
+            (ClaimType.PreApproval, ClaimCategory.Surgery, "Bay of Plenty Surgical", -21, 14_500m, "Knee arthroscopy recommended by orthopaedic surgeon after MRI showed meniscus tear.", true),
+            (ClaimType.PreApproval, ClaimCategory.Diagnostics, "Midland Radiology", -7, 1_150m, "MRI of lower back, referred by GP for ongoing sciatica.", true),
+            (ClaimType.Reimbursement, ClaimCategory.Prescription, "Unichem Te Awamutu", 3, 48.5m, "Asthma inhaler, three-month supply. Call me on 021 555 0144 if you need anything.", true),
+            (ClaimType.PreApproval, ClaimCategory.Specialist, "Waikato Cardiology", 2, 620m, "Cardiology consult for palpitations; appointment already happened last week.", true),
+            (ClaimType.Reimbursement, ClaimCategory.Physiotherapy, "Waikato Sports Physio", 12, 240m, "Four physio sessions after a netball ankle sprain.", true),
+        ];
+
+        for (var i = 0; i < samples.Length; i++)
+        {
+            var s = samples[i];
+            // The last sample duplicates the second (same member, provider, date and amount).
+            var memberId = i == samples.Length - 1 ? memberIds[1] : memberIds[i % memberIds.Count];
+            var submitted = now.AddHours(-(samples.Length - i) * 5);
+            var claim = new Claim
+            {
+                ClaimNumber = $"CL-{submitted:yyMMdd}-{1000 + i}",
+                MemberId = memberId,
+                Type = s.Type,
+                Category = s.Category,
+                ProviderName = s.Provider,
+                TreatmentDate = today.AddDays(-s.DaysAgo),
+                Amount = s.Amount,
+                Description = s.Description,
+                Status = ClaimStatus.Submitted,
+                SubmittedAt = submitted,
+                DueBy = ClaimRules.DueBy(DateOnly.FromDateTime(submitted.UtcDateTime)),
+            };
+            if (s.Receipt)
+            {
+                claim.Documents.Add(new ClaimDocument
+                {
+                    BlobName = $"{claim.ClaimNumber}/sample.pdf",
+                    FileName = s.Type == ClaimType.PreApproval ? "referral-letter.pdf" : "receipt.pdf",
+                    ContentType = "application/pdf",
+                    SizeBytes = 48_000,
+                    UploadedAt = submitted,
+                });
+            }
+            db.Claims.Add(claim);
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static async Task SeedMembersAsync(ThriveLinkDbContext db, TimeProvider clock, int members, int days, CancellationToken ct)
+    {
         if (await db.Members.AnyAsync(ct)) return;
 
         var rng = new Random(42);

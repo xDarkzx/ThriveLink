@@ -11,6 +11,9 @@ param adminUsername string = 'azureuser'
 @description('SSH public key for the VM admin user.')
 param sshPublicKey string
 
+@description('x86 size; small sizes are often capacity-restricted on trial subscriptions, so dr.ps1 tries several.')
+param vmSize string = 'Standard_B2ats_v2'
+
 var suffix = take(uniqueString(resourceGroup().id), 6)
 var base = 'thrivelink-${env}-${suffix}'
 var tags = {
@@ -65,7 +68,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
   location: location
   tags: tags
   properties: {
-    hardwareProfile: { vmSize: 'Standard_B1s' }
+    hardwareProfile: { vmSize: vmSize }
     osProfile: {
       computerName: 'legacy-policy'
       adminUsername: adminUsername
@@ -136,6 +139,22 @@ resource testVnet 'Microsoft.Network/virtualNetworks@2024-01-01' = {
     subnets: [{ name: 'snet-legacy', properties: { addressPrefix: '10.52.1.0/24' } }]
   }
 }
+
+// Site Recovery writes replicated data to the cache account using the vault's managed identity.
+var contributor = 'b24988ac-6180-42a0-ab88-20f7382dd24c'
+var storageBlobDataContributor = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+
+resource vaultCacheRoles 'Microsoft.Authorization/roleAssignments@2022-04-01' = [
+  for role in [contributor, storageBlobDataContributor]: {
+    scope: cache
+    name: guid(cache.id, vault.id, role)
+    properties: {
+      roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', role)
+      principalId: vault.identity.principalId
+      principalType: 'ServicePrincipal'
+    }
+  }
+]
 
 output vmId string = vm.id
 output vmName string = vm.name

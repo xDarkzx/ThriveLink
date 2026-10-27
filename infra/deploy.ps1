@@ -29,27 +29,40 @@ function Exec([scriptblock]$Command, [string]$What) {
     if ($LASTEXITCODE -ne 0) { throw "$What failed (exit code $LASTEXITCODE)" }
 }
 
-function Invoke-Sql([string]$Server, [string]$Database, [string]$Sql) {
+function Invoke-Sql([string]$Server, [string]$Database, [string]$Sql, [int]$Attempts = 1) {
     # Signs in to Azure SQL with the deployer's Entra token (no SQL passwords exist on this server).
-    $token = az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv
-    $conn = New-Object System.Data.SqlClient.SqlConnection("Server=tcp:$Server,1433;Database=$Database;Encrypt=True;Connect Timeout=90")
-    $conn.AccessToken = $token
-    $conn.Open()
-    try {
-        # Split T-SQL batches on GO lines, as sqlcmd does.
-        foreach ($batch in ($Sql -split '(?m)^\s*GO\s*$')) {
-            if ([string]::IsNullOrWhiteSpace($batch)) { continue }
-            $cmd = $conn.CreateCommand()
-            $cmd.CommandText = $batch
-            $cmd.CommandTimeout = 300
-            [void]$cmd.ExecuteNonQuery()
+    # With ErrorActionPreference=Continue a .NET exception would NOT stop the script, so failures are caught
+    # and re-thrown explicitly. Retries cover Entra not yet knowing a just-created managed identity.
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        try {
+            $token = az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv
+            $conn = New-Object System.Data.SqlClient.SqlConnection("Server=tcp:$Server,1433;Database=$Database;Encrypt=True;Connect Timeout=90")
+            $conn.AccessToken = $token
+            $conn.Open()
+            try {
+                # Split T-SQL batches on GO lines, as sqlcmd does.
+                foreach ($batch in ($Sql -split '(?m)^\s*GO\s*$')) {
+                    if ([string]::IsNullOrWhiteSpace($batch)) { continue }
+                    $cmd = $conn.CreateCommand()
+                    $cmd.CommandText = $batch
+                    $cmd.CommandTimeout = 300
+                    [void]$cmd.ExecuteNonQuery()
+                }
+            }
+            finally { $conn.Close() }
+            return
+        }
+        catch {
+            $message = if ($_.Exception.InnerException) { $_.Exception.InnerException.Message } else { $_.Exception.Message }
+            if ($attempt -ge $Attempts) { throw "SQL failed: $message" }
+            Write-Host "  SQL attempt $attempt failed ($message); retrying in 30s..."
+            Start-Sleep 30
         }
     }
-    finally { $conn.Close() }
 }
 
 function Grant-SqlAccess([string]$Server, [string]$Database, [string]$Identity, [string]$Extra = '') {
-    Invoke-Sql $Server $Database @"
+    Invoke-Sql -Server $Server -Database $Database -Attempts 6 -Sql @"
 IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'$Identity')
     CREATE USER [$Identity] FROM EXTERNAL PROVIDER;
 ALTER ROLE db_datareader ADD MEMBER [$Identity];

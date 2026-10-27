@@ -75,6 +75,23 @@ jobs:
       - name: Dependency audit
         run: npm audit --audit-level=high --omit=dev
 
+  container:
+    name: Claims triage image build + vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -f src/ThriveLink.ClaimsTriage/Dockerfile -t thrivelink/claims-triage:${{ github.sha }} .
+
+      - name: Scan image (fail on high/critical with a fix available)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: thrivelink/claims-triage:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
   secrets:
     name: Secret scan
     runs-on: ubuntu-latest
